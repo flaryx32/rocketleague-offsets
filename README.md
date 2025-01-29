@@ -13,3 +13,5 @@ I am **not affiliated with Psyonix or Epic Games** in any way.
 Use at your own risk, and don't use this for anything that violates the game's terms of service.
 
 Good luck, and have fun!
+#Special Thanks
+As someone let me notice i didn't credit abduhl from unknown cheats, so thanks for you patterns
