@@ -13,7 +13,12 @@ PATTERNS = {
     'GObjects_2': b"\x48\x8B\x05\x33\xF2\x03\x02",
     
     # another backup pattern just in case
-    'GObjects_3': b"\x48\x89\x05\x00\x00\x00\x00\x4C\x8D\x05\x00\x00\x00\x00\xBA\xFA\x02"
+    'GObjects_3': b"\x48\x89\x05\x00\x00\x00\x00\x4C\x8D\x05\x00\x00\x00\x00\xBA\xFA\x02",
+    
+    # new patterns as of 18/06/2025
+    'GObjects_New': b"\x48\x8B\xC8\x48\x8B\x05\x00\x00\x00\x00\x48\x8B\x0C\xC8",
+    'GNames_New1': b"\x48\x8B\x0D\x00\x00\x00\x00\x48\x8B\x0C\xC1",
+    'GNames_New2': b"\x49\x63\x06\x48\x8D\x55\xE8\x48\x8B\x0D\x00\x00\x00\x00\x48\x8B\x0C\xC1"
 }
 
 def pattern_scan(pm, module_base, module_size, pattern, pattern_name="Unknown"):
@@ -69,6 +74,45 @@ def get_gobjects_method1(pm, base_addr, pattern_addr):
         print(f"[!] method 1 gobjects failed: {e}")
         return None
 
+def get_gobjects_new(pm, base_addr, pattern_addr):
+    """ attempt to find gobjects using new pattern """
+    try:
+        # Pattern: 48 8B C8 48 8B 05 ?? ?? ?? ?? 48 8B 0C C8
+        # The relative offset is at pattern_addr + 6 (after 48 8B 05)
+        offset = pattern_addr + 6
+        rel_offset = struct.unpack("i", pm.read_bytes(offset, 4))[0]
+        final_addr = offset + rel_offset + 4
+        return final_addr
+    except Exception as e:
+        print(f"[!] new gobjects method failed: {e}")
+        return None
+
+def get_gnames_new1(pm, base_addr, pattern_addr):
+    """ attempt to find gnames using new pattern 1 """
+    try:
+        # Pattern: 48 8B 0D ?? ?? ?? ?? 48 8B 0C C1
+        # The relative offset is at pattern_addr + 3 (after 48 8B 0D)
+        offset = pattern_addr + 3
+        rel_offset = struct.unpack("i", pm.read_bytes(offset, 4))[0]
+        final_addr = offset + rel_offset + 4
+        return final_addr
+    except Exception as e:
+        print(f"[!] new gnames method 1 failed: {e}")
+        return None
+
+def get_gnames_new2(pm, base_addr, pattern_addr):
+    """ attempt to find gnames using new pattern 2 """
+    try:
+        # Pattern: 49 63 06 48 8D 55 E8 48 8B 0D ?? ?? ?? ?? 48 8B 0C C1
+        # The relative offset is at pattern_addr + 10 (after 49 63 06 48 8D 55 E8 48 8B 0D)
+        offset = pattern_addr + 10
+        rel_offset = struct.unpack("i", pm.read_bytes(offset, 4))[0]
+        final_addr = offset + rel_offset + 4
+        return final_addr
+    except Exception as e:
+        print(f"[!] new gnames method 2 failed: {e}")
+        return None
+
 def find_gnames_gobjects():
     try:
         print("[*] attaching to Rocket League...")
@@ -83,16 +127,36 @@ def find_gnames_gobjects():
         gnames_addr = None
         gobjects_addr = None
         
-        print("\n[*] trying method 1...")
-        gnames_pattern_addr = pattern_scan(pm, base_address, module_size, PATTERNS['GNames_1'], "GNames 1")
-        if gnames_pattern_addr:
-            gnames_addr = get_gnames_method1(pm, base_address, gnames_pattern_addr)
-            print(f"[+] gnames 1: {hex(gnames_addr) if gnames_addr else 'failed'}")
-        
-        gobjects_pattern_addr = pattern_scan(pm, base_address, module_size, PATTERNS['GObjects_1'], "GObjects 1")
+        # Try new patterns first
+        print("\n[*] trying new patterns...")
+        gobjects_pattern_addr = pattern_scan(pm, base_address, module_size, PATTERNS['GObjects_New'], "GObjects New")
         if gobjects_pattern_addr:
-            gobjects_addr = get_gobjects_method1(pm, base_address, gobjects_pattern_addr)
-            print(f"[+] gobjects 1: {hex(gobjects_addr) if gobjects_addr else 'failed'}")
+            gobjects_addr = get_gobjects_new(pm, base_address, gobjects_pattern_addr)
+            print(f"[+] gobjects new: {hex(gobjects_addr) if gobjects_addr else 'failed'}")
+        
+        gnames_pattern_addr = pattern_scan(pm, base_address, module_size, PATTERNS['GNames_New1'], "GNames New1")
+        if gnames_pattern_addr:
+            gnames_addr = get_gnames_new1(pm, base_address, gnames_pattern_addr)
+            print(f"[+] gnames new1: {hex(gnames_addr) if gnames_addr else 'failed'}")
+        
+        if not gnames_addr:
+            gnames_pattern_addr = pattern_scan(pm, base_address, module_size, PATTERNS['GNames_New2'], "GNames New2")
+            if gnames_pattern_addr:
+                gnames_addr = get_gnames_new2(pm, base_address, gnames_pattern_addr)
+                print(f"[+] gnames new2: {hex(gnames_addr) if gnames_addr else 'failed'}")
+        
+        # If new patterns failed, try old methods
+        if not gnames_addr or not gobjects_addr:
+            print("\n[*] new patterns failed, trying method 1...")
+            gnames_pattern_addr = pattern_scan(pm, base_address, module_size, PATTERNS['GNames_1'], "GNames 1")
+            if gnames_pattern_addr and not gnames_addr:
+                gnames_addr = get_gnames_method1(pm, base_address, gnames_pattern_addr)
+                print(f"[+] gnames 1: {hex(gnames_addr) if gnames_addr else 'failed'}")
+            
+            gobjects_pattern_addr = pattern_scan(pm, base_address, module_size, PATTERNS['GObjects_1'], "GObjects 1")
+            if gobjects_pattern_addr and not gobjects_addr:
+                gobjects_addr = get_gobjects_method1(pm, base_address, gobjects_pattern_addr)
+                print(f"[+] gobjects 1: {hex(gobjects_addr) if gobjects_addr else 'failed'}")
         
         if not gnames_addr or not gobjects_addr:
             print("\n[*] method 1 failed, trying method 2...")
